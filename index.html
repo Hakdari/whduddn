@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JumpingBall</title>
+    <style>
+        body {
+            text-align: center;
+            background-color: #222;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            background-color: black;
+            display: block;
+            margin: 20px auto;
+            border: 2px solid white;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>JumpingBall</h1>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <p id="info">← → 이동 | ★ 3개를 모아 다음 레벨로! | 장애물 조심!</p>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        let ball = { x: 100, y: 300, radius: 15, color: "red", vx: 0, vy: -8, gravity: 0.3, jumpPower: 8 };
+        let stars = [];
+        let platforms = [];
+        let springs = [];
+        let obstacles = [];
+        let collectedStars = 0;
+        let level = 1;
+        let keys = {};
+
+        window.addEventListener("keydown", (e) => keys[e.key] = true);
+        window.addEventListener("keyup", (e) => keys[e.key] = false);
+
+        function generateLevel() {
+            stars = [];
+            platforms = [];
+            springs = [];
+            obstacles = [];
+
+            // ⭐ 별 생성
+            for (let i = 0; i < 3; i++) {
+                let starX = Math.random() * (canvas.width - 100) + 50;
+                let starY = Math.random() * 200 + 100;
+                stars.push({ x: starX, y: starY, collected: false });
+            }
+
+            // 🏔️ 플랫폼 생성 (기본 점프로 올라갈 수 있도록 배치)
+            let lastY = canvas.height - 50;
+            let minPlatformCount = 3;
+            let maxJumpHeight = ball.jumpPower * 10;
+
+            for (let i = 0; i < level + minPlatformCount; i++) {
+                let platX = Math.random() * (canvas.width - 150);
+                let platY = lastY - Math.random() * maxJumpHeight - 30;
+                let platWidth = Math.random() * 80 + 70;
+
+                if (platY > 50 && platY >= lastY - maxJumpHeight) {
+                    platforms.push({ x: platX, y: platY, width: platWidth, height: 10 });
+                    lastY = platY;
+                }
+            }
+
+            if (platforms.length === 0) {
+                platforms.push({ x: 200, y: canvas.height - 100, width: 100, height: 10 });
+            }
+
+            // 🏀 스프링 생성 (지형과 겹치지 않도록)
+            platforms.forEach(platform => {
+                let springX = platform.x + Math.random() * (platform.width - 20);
+                let springY = platform.y - 10;
+                let overlaps = platforms.some(p => (
+                    Math.abs(springX - p.x) < 30 && Math.abs(springY - p.y) < 20
+                ));
+
+                if (!overlaps) {
+                    springs.push({ x: springX, y: springY, width: 20, height: 10 });
+                }
+            });
+
+            // ⚠️ 장애물 생성 (플랫폼 근처)
+            for (let i = 0; i < level + 2; i++) {
+                let obsX = Math.random() * (canvas.width - 50) + 25;
+                let obsY = Math.random() * (canvas.height - 150) + 75;
+                let obsSize = 20;
+
+                let tooClose = platforms.some(p => Math.abs(obsX - p.x) < 50 && Math.abs(obsY - p.y) < 20);
+                let nearStar = stars.some(s => Math.abs(obsX - s.x) < 50 && Math.abs(obsY - s.y) < 20);
+
+                if (!tooClose && !nearStar) {
+                    obstacles.push({ x: obsX, y: obsY, size: obsSize });
+                }
+            }
+        }
+
+        function update() {
+            if (keys["ArrowLeft"]) {
+                ball.vx = -3;
+            } else if (keys["ArrowRight"]) {
+                ball.vx = 3;
+            } else {
+                ball.vx = 0;
+            }
+
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            ball.vy += ball.gravity;
+
+            if (ball.y + ball.radius > canvas.height) {
+                ball.y = canvas.height - ball.radius;
+                ball.vy = -ball.jumpPower;
+            }
+
+            if (ball.x - ball.radius < 0) ball.x = ball.radius;
+            if (ball.x + ball.radius > canvas.width) ball.x = canvas.width - ball.radius;
+
+            platforms.forEach(platform => {
+                if (ball.y + ball.radius > platform.y && ball.y + ball.radius < platform.y + 10 &&
+                    ball.x > platform.x && ball.x < platform.x + platform.width) {
+                    ball.y = platform.y - ball.radius;
+                    ball.vy = -ball.jumpPower;
+                }
+            });
+
+            springs.forEach(spring => {
+                if (ball.y + ball.radius > spring.y && ball.y + ball.radius < spring.y + 10 &&
+                    ball.x > spring.x && ball.x < spring.x + spring.width) {
+                    ball.vy = -12;
+                }
+            });
+
+            obstacles.forEach(obs => {
+                if (Math.abs(ball.x - obs.x) < obs.size && Math.abs(ball.y - obs.y) < obs.size) {
+                    alert("⚠️ 장애물에 부딪혔습니다! 다시 시작합니다.");
+                    collectedStars = 0;
+                    ball.x = 100;
+                    ball.y = 300;
+                    generateLevel();
+                }
+            });
+
+            stars.forEach(star => {
+                if (!star.collected && Math.abs(ball.x - star.x) < 20 && Math.abs(ball.y - star.y) < 20) {
+                    star.collected = true;
+                    collectedStars++;
+                }
+            });
+
+            if (collectedStars === 3) {
+                levelUp();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = ball.color;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            stars.forEach(star => {
+                if (!star.collected) {
+                    ctx.fillStyle = "yellow";
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            ctx.fillStyle = "gray";
+            platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            });
+
+            ctx.fillStyle = "lime";
+            springs.forEach(spring => {
+                ctx.fillRect(spring.x, spring.y, spring.width, spring.height);
+            });
+
+            ctx.fillStyle = "red";
+            obstacles.forEach(obs => {
+                ctx.fillRect(obs.x, obs.y, obs.size, obs.size);
+            });
+
+            ctx.fillStyle = "white";
+            ctx.fillText(`레벨: ${level}`, 50, 30);
+            ctx.fillText(`★: ${collectedStars} / 3`, 50, 50);
+        }
+
+        function levelUp() {
+            alert(`레벨 ${level} 클리어!`);
+            level++;
+            collectedStars = 0;
+            ball.x = 100;
+            ball.y = 300;
+            generateLevel();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        generateLevel();
+        gameLoop();
+    </script>
+</body>
+</html>
